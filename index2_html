@@ -1,0 +1,101 @@
+// 4-Stage Pipelined Processor
+module pipelined_processor(
+    input clk,
+    input reset
+);
+
+    // Instruction encoding
+    // opcode [7:6], rs [5:4], rt [3:2], rd [1:0]
+    reg [7:0] instr_mem [0:7];   // 8 instructions
+    reg [7:0] reg_file [0:3];    // 4 registers R0-R3
+
+    // Pipeline registers
+    reg [7:0] IF_ID, ID_EX, EX_WB;
+    reg [7:0] result;
+
+    integer i;
+
+    // Instruction Fetch (IF)
+    reg [2:0] pc;
+
+    always @(posedge clk or posedge reset) begin
+        if (reset) begin
+            pc <= 0;
+            IF_ID <= 8'b0;
+            ID_EX <= 8'b0;
+            EX_WB <= 8'b0;
+            result <= 8'b0;
+
+            // Initialize instruction memory
+            instr_mem[0] <= 8'b00000001; // ADD R0, R0, R1
+            instr_mem[1] <= 8'b01000110; // SUB R1, R0, R2
+            instr_mem[2] <= 8'b10001000; // LOAD R2, 8
+            instr_mem[3] <= 8'b00011000; // ADD R2, R2, R0
+            instr_mem[4] <= 8'b00000000;
+            instr_mem[5] <= 8'b00000000;
+            instr_mem[6] <= 8'b00000000;
+            instr_mem[7] <= 8'b00000000;
+
+            // Initialize register file
+            for (i=0; i<4; i=i+1)
+                reg_file[i] <= i;
+        end
+        else begin
+            // IF Stage
+            IF_ID <= instr_mem[pc];
+            pc <= pc + 1;
+
+            // ID Stage
+            ID_EX <= IF_ID;
+
+            // EX Stage
+            case(ID_EX[7:6])
+                2'b00: result <= reg_file[ID_EX[5:4]] + reg_file[ID_EX[3:2]]; // ADD
+                2'b01: result <= reg_file[ID_EX[5:4]] - reg_file[ID_EX[3:2]]; // SUB
+                2'b10: result <= ID_EX[3:0];                                  // LOAD immediate
+                default: result <= 8'b0;
+            endcase
+
+            // WB Stage
+            EX_WB <= ID_EX;
+            if (EX_WB[7:6] != 2'b11) begin
+                reg_file[EX_WB[1:0]] <= result;
+            end
+        end
+    end
+
+    // Monitor for simulation
+    always @(posedge clk) begin
+        $display("Time=%0t | PC=%d | IF_ID=%b | ID_EX=%b | EX_WB=%b | R0=%d R1=%d R2=%d R3=%d", 
+        $time, pc, IF_ID, ID_EX, EX_WB, reg_file[0], reg_file[1], reg_file[2], reg_file[3]);
+    end
+
+endmodule
+
+`timescale 1ns/1ps
+
+module pipelined_processor_tb;
+
+reg clk;
+reg reset;
+
+pipelined_processor uut (
+    .clk(clk),
+    .reset(reset)
+);
+
+// Clock generation
+always #5 clk = ~clk;
+
+initial begin
+    clk = 0;
+    reset = 1;
+    #10;
+    reset = 0;
+
+    // Run for 100 time units
+    #100;
+    $finish;
+end
+
+endmodule
